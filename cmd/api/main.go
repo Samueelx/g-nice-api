@@ -12,6 +12,7 @@ import (
 	"github.com/Samueelx/g-nice-api/internal/config"
 	"github.com/Samueelx/g-nice-api/internal/db"
 	"github.com/Samueelx/g-nice-api/internal/router"
+	"github.com/Samueelx/g-nice-api/internal/token"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 )
@@ -31,6 +32,9 @@ func main() {
 	// ── Set Gin mode ──────────────────────────────────────────────────────────
 	gin.SetMode(cfg.GinMode)
 
+	// ── Build token service ───────────────────────────────────────────────────
+	ts := token.New(cfg.JWTSecret)
+
 	// ── Connect to database ───────────────────────────────────────────────────
 	database, err := db.Connect(cfg)
 	if err != nil {
@@ -44,7 +48,7 @@ func main() {
 	log.Println("✅ Database migrations applied")
 
 	// ── Build router ──────────────────────────────────────────────────────────
-	r := router.New(database)
+	r := router.New(database, ts)
 
 	// ── Start server with graceful shutdown ───────────────────────────────────
 	srv := &http.Server{
