@@ -21,6 +21,8 @@ type UserRepository interface {
 	Update(user *models.User) error
 	// UpdateFields performs a partial update: only the keys present in fields are written.
 	UpdateFields(id uint, fields map[string]interface{}) error
+	// IncrementCounter atomically adjusts a numeric column by delta (use -1 to decrement).
+	IncrementCounter(id uint, column string, delta int) error
 	Delete(id uint) error
 }
 
@@ -97,6 +99,15 @@ func (r *userRepository) UpdateFields(id uint, fields map[string]interface{}) er
 		return ErrNotFound
 	}
 	return nil
+}
+
+// IncrementCounter performs an atomic SQL UPDATE to adjust a counter column.
+// Example: IncrementCounter(userID, "posts_count", 1)
+func (r *userRepository) IncrementCounter(id uint, column string, delta int) error {
+	return r.db.Model(&models.User{}).
+		Where("id = ?", id).
+		UpdateColumn(column, gorm.Expr(column+" + ?", delta)).
+		Error
 }
 
 func (r *userRepository) Delete(id uint) error {

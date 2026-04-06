@@ -95,20 +95,4 @@ func (h *UserHandler) GetUserByUsername(c *gin.Context) {
 	OK(c, profile)
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
 
-// extractUserID reads the userID injected by AuthRequired middleware.
-// It writes a 401 and returns false if the value is missing or malformed.
-func extractUserID(c *gin.Context) (uint, bool) {
-	v, exists := c.Get("userID")
-	if !exists {
-		Unauthorized(c, "not authenticated")
-		return 0, false
-	}
-	id, ok := v.(uint)
-	if !ok || id == 0 {
-		Unauthorized(c, "invalid token claims")
-		return 0, false
-	}
-	return id, true
-}

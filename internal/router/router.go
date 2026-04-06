@@ -23,6 +23,7 @@ func New(db *gorm.DB, ts *token.Service) *gin.Engine {
 
 	// ── Dependency wiring ─────────────────────────────────────────────────────
 	userRepo := repository.NewUserRepository(db)
+	postRepo := repository.NewPostRepository(db)
 
 	// Auth
 	authSvc := services.NewAuthService(userRepo, ts)
@@ -32,6 +33,10 @@ func New(db *gorm.DB, ts *token.Service) *gin.Engine {
 	userSvc := services.NewUserService(userRepo)
 	userHandler := handlers.NewUserHandler(userSvc)
 
+	// Posts
+	postSvc := services.NewPostService(postRepo, userRepo)
+	postHandler := handlers.NewPostHandler(postSvc)
+
 	// ── Health check ──────────────────────────────────────────────────────────
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
@@ -40,29 +45,34 @@ func New(db *gorm.DB, ts *token.Service) *gin.Engine {
 	// ── API v1 ────────────────────────────────────────────────────────────────
 	v1 := r.Group("/api/v1")
 	{
-		// Public auth routes
+		// ── Auth (public) ─────────────────────────────────────────────────────
 		auth := v1.Group("/auth")
 		{
 			auth.POST("/register", authHandler.Register)
 			auth.POST("/login", authHandler.Login)
 		}
 
-		// Public user profiles (no auth required to browse)
+		// ── Public read-only resources ────────────────────────────────────────
 		v1.GET("/users/:username", userHandler.GetUserByUsername)
+		v1.GET("/users/:username/posts", postHandler.ListUserPosts)
+		v1.GET("/posts", postHandler.ListFeed)
+		v1.GET("/posts/:id", postHandler.GetPost)
 
-		// Protected routes (require valid JWT)
+		// ── Protected routes (JWT required) ───────────────────────────────────
 		protected := v1.Group("/")
 		protected.Use(middleware.AuthRequired(ts))
 		{
-			// Current user profile
+			// User profile
 			protected.GET("/users/me", userHandler.GetMe)
 			protected.PATCH("/users/me", userHandler.UpdateMe)
 
-			// Posts / feed — coming next
-			// protected.GET("/posts",  postHandler.ListFeed)
-			// protected.POST("/posts", postHandler.CreatePost)
+			// Posts
+			protected.POST("/posts", postHandler.CreatePost)
+			protected.PATCH("/posts/:id", postHandler.UpdatePost)
+			protected.DELETE("/posts/:id", postHandler.DeletePost)
 		}
 	}
+
 
 	return r
 }
