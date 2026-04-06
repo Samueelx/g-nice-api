@@ -1,0 +1,46 @@
+services:
+  # ── PostgreSQL ───────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: gnice_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-gnice_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-yourpassword}
+      POSTGRES_DB: ${DB_NAME:-gnice_db}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-gnice_user} -d ${DB_NAME:-gnice_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── API ───────────────────────────────────────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: gnice_api
+    restart: unless-stopped
+    environment:
+      DB_HOST: postgres
+      DB_PORT: ${DB_PORT:-5432}
+      DB_USER: ${DB_USER:-gnice_user}
+      DB_PASSWORD: ${DB_PASSWORD:-yourpassword}
+      DB_NAME: ${DB_NAME:-gnice_db}
+      DB_SSLMODE: ${DB_SSLMODE:-disable}
+      PORT: ${PORT:-8080}
+      JWT_SECRET: ${JWT_SECRET}
+      GIN_MODE: ${GIN_MODE:-release}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:5173}
+    ports:
+      - "${PORT:-8080}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
