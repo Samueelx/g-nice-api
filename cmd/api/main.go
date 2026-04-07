@@ -11,6 +11,7 @@ import (
 
 	"github.com/Samueelx/g-nice-api/internal/config"
 	"github.com/Samueelx/g-nice-api/internal/db"
+	"github.com/Samueelx/g-nice-api/internal/email"
 	"github.com/Samueelx/g-nice-api/internal/router"
 	"github.com/Samueelx/g-nice-api/internal/token"
 	"github.com/gin-gonic/gin"
@@ -35,6 +36,10 @@ func main() {
 	// ── Build token service ───────────────────────────────────────────────────
 	ts := token.New(cfg.JWTSecret)
 
+	// ── Build email sender ──────────────────────────────────────────────────
+	mailer := email.NewResendSender(cfg.ResendAPIKey, cfg.EmailFrom)
+	log.Println("✅ Email sender initialised")
+
 	// ── Connect to database ───────────────────────────────────────────────────
 	database, err := db.Connect(cfg)
 	if err != nil {
@@ -48,7 +53,7 @@ func main() {
 	log.Println("✅ Database migrations applied")
 
 	// ── Build router ──────────────────────────────────────────────────────────
-	r := router.New(database, ts)
+	r := router.New(database, ts, mailer)
 
 	// ── Start server with graceful shutdown ───────────────────────────────────
 	srv := &http.Server{

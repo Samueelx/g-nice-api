@@ -1,5 +1,7 @@
 package models
 
+import "time"
+
 // User represents an account in the platform.
 // PasswordHash is always excluded from JSON responses.
 type User struct {
@@ -13,6 +15,12 @@ type User struct {
 	AvatarURL    string  `gorm:"size:500"                      json:"avatar_url"`
 	IsVerified   bool    `gorm:"default:false"                 json:"is_verified"`
 	IsPrivate    bool    `gorm:"default:false"                 json:"is_private"`
+
+	// Email verification via OTP
+	IsEmailVerified bool       `gorm:"default:false;index"           json:"is_email_verified"`
+	OTPHash         string     `gorm:"size:64"                       json:"-"`
+	OTPExpiry       *time.Time `                                      json:"-"`
+	OTPAttempts     int        `gorm:"default:0"                     json:"-"`
 
 	// Denormalised counters — updated via service layer; avoids expensive COUNT(*) on hot paths.
 	PostsCount     int `gorm:"default:0" json:"posts_count"`

@@ -16,6 +16,8 @@ type Config struct {
 	Port       string
 	JWTSecret  string
 	GinMode    string
+	ResendAPIKey string
+	EmailFrom    string
 }
 
 // Load reads environment variables and returns a Config.
@@ -29,8 +31,10 @@ func Load() (*Config, error) {
 		DBName:     getEnv("DB_NAME", "gnice_db"),
 		DBSSLMode:  getEnv("DB_SSLMODE", "disable"),
 		Port:       getEnv("PORT", "8080"),
-		JWTSecret:  getEnv("JWT_SECRET", ""),
-		GinMode:    getEnv("GIN_MODE", "debug"),
+		JWTSecret:    getEnv("JWT_SECRET", ""),
+		GinMode:      getEnv("GIN_MODE", "debug"),
+		ResendAPIKey: getEnv("RESEND_API_KEY", ""),
+		EmailFrom:    getEnv("EMAIL_FROM", ""),
 	}
 
 	if cfg.DBPassword == "" {
@@ -38,6 +42,12 @@ func Load() (*Config, error) {
 	}
 	if cfg.JWTSecret == "" {
 		return nil, fmt.Errorf("JWT_SECRET is required")
+	}
+	if cfg.ResendAPIKey == "" {
+		return nil, fmt.Errorf("RESEND_API_KEY is required")
+	}
+	if cfg.EmailFrom == "" {
+		return nil, fmt.Errorf("EMAIL_FROM is required")
 	}
 
 	return cfg, nil

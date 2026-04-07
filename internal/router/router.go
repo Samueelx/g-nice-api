@@ -3,6 +3,7 @@ package router
 import (
 	"net/http"
 
+	"github.com/Samueelx/g-nice-api/internal/email"
 	"github.com/Samueelx/g-nice-api/internal/handlers"
 	"github.com/Samueelx/g-nice-api/internal/middleware"
 	"github.com/Samueelx/g-nice-api/internal/repository"
@@ -13,7 +14,7 @@ import (
 )
 
 // New creates and configures the Gin engine with all middleware and routes.
-func New(db *gorm.DB, ts *token.Service) *gin.Engine {
+func New(db *gorm.DB, ts *token.Service, mailer email.Sender) *gin.Engine {
 	r := gin.New()
 
 	// ── Global middleware ─────────────────────────────────────────────────────
@@ -26,7 +27,7 @@ func New(db *gorm.DB, ts *token.Service) *gin.Engine {
 	postRepo := repository.NewPostRepository(db)
 
 	// Auth
-	authSvc := services.NewAuthService(userRepo, ts)
+	authSvc := services.NewAuthService(userRepo, ts, mailer)
 	authHandler := handlers.NewAuthHandler(authSvc)
 
 	// Users
@@ -48,8 +49,10 @@ func New(db *gorm.DB, ts *token.Service) *gin.Engine {
 		// ── Auth (public) ─────────────────────────────────────────────────────
 		auth := v1.Group("/auth")
 		{
-			auth.POST("/register", authHandler.Register)
-			auth.POST("/login", authHandler.Login)
+			auth.POST("/register",       authHandler.Register)
+			auth.POST("/verify-otp",     authHandler.VerifyOTP)
+			auth.POST("/resend-otp",     authHandler.ResendOTP)
+			auth.POST("/login",          authHandler.Login)
 		}
 
 		// ── Public read-only resources ────────────────────────────────────────
