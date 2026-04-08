@@ -23,20 +23,30 @@ func New(db *gorm.DB, ts *token.Service, mailer email.Sender) *gin.Engine {
 	r.Use(middleware.CORS())
 
 	// ── Dependency wiring ─────────────────────────────────────────────────────
-	userRepo := repository.NewUserRepository(db)
-	postRepo := repository.NewPostRepository(db)
+	userRepo    := repository.NewUserRepository(db)
+	postRepo    := repository.NewPostRepository(db)
+	commentRepo := repository.NewCommentRepository(db)
+	likeRepo    := repository.NewLikeRepository(db)
 
 	// Auth
-	authSvc := services.NewAuthService(userRepo, ts, mailer)
+	authSvc     := services.NewAuthService(userRepo, ts, mailer)
 	authHandler := handlers.NewAuthHandler(authSvc)
 
 	// Users
-	userSvc := services.NewUserService(userRepo)
+	userSvc     := services.NewUserService(userRepo)
 	userHandler := handlers.NewUserHandler(userSvc)
 
 	// Posts
-	postSvc := services.NewPostService(postRepo, userRepo)
+	postSvc     := services.NewPostService(postRepo, userRepo)
 	postHandler := handlers.NewPostHandler(postSvc)
+
+	// Comments
+	commentSvc     := services.NewCommentService(commentRepo, postRepo)
+	commentHandler := handlers.NewCommentHandler(commentSvc)
+
+	// Likes
+	likeSvc     := services.NewLikeService(likeRepo, postRepo, commentRepo)
+	likeHandler := handlers.NewLikeHandler(likeSvc)
 
 	// ── Health check ──────────────────────────────────────────────────────────
 	r.GET("/health", func(c *gin.Context) {
@@ -56,26 +66,38 @@ func New(db *gorm.DB, ts *token.Service, mailer email.Sender) *gin.Engine {
 		}
 
 		// ── Public read-only resources ────────────────────────────────────────
-		v1.GET("/users/:username", userHandler.GetUserByUsername)
+		v1.GET("/users/:username",       userHandler.GetUserByUsername)
 		v1.GET("/users/:username/posts", postHandler.ListUserPosts)
-		v1.GET("/posts", postHandler.ListFeed)
-		v1.GET("/posts/:id", postHandler.GetPost)
+		v1.GET("/posts",                 postHandler.ListFeed)
+		v1.GET("/posts/:id",             postHandler.GetPost)
+		v1.GET("/posts/:id/comments",    commentHandler.ListComments)
+		v1.GET("/comments/:cid/replies", commentHandler.ListReplies)
 
 		// ── Protected routes (JWT required) ───────────────────────────────────
 		protected := v1.Group("/")
 		protected.Use(middleware.AuthRequired(ts))
 		{
 			// User profile
-			protected.GET("/users/me", userHandler.GetMe)
+			protected.GET("/users/me",   userHandler.GetMe)
 			protected.PATCH("/users/me", userHandler.UpdateMe)
 
 			// Posts
-			protected.POST("/posts", postHandler.CreatePost)
-			protected.PATCH("/posts/:id", postHandler.UpdatePost)
-			protected.DELETE("/posts/:id", postHandler.DeletePost)
+			protected.POST("/posts",          postHandler.CreatePost)
+			protected.PATCH("/posts/:id",      postHandler.UpdatePost)
+			protected.DELETE("/posts/:id",     postHandler.DeletePost)
+
+			// Comments
+			protected.POST("/posts/:id/comments",                  commentHandler.CreateComment)
+			protected.POST("/posts/:id/comments/:cid/replies",     commentHandler.CreateReply)
+			protected.PATCH("/comments/:cid",                      commentHandler.UpdateComment)
+			protected.DELETE("/comments/:cid",                     commentHandler.DeleteComment)
+
+			// Likes (toggle)
+			protected.POST("/posts/:id/like",    likeHandler.TogglePostLike)
+			protected.POST("/comments/:cid/like", likeHandler.ToggleCommentLike)
 		}
 	}
 
-
 	return r
 }
+
