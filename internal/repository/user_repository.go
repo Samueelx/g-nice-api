@@ -2,11 +2,11 @@ package repository
 
 import (
 	"errors"
-	"strings"
 
 	"github.com/Samueelx/g-nice-api/internal/models"
 	"gorm.io/gorm"
 )
+
 
 // UserRepository defines the data-access contract for User entities.
 // All methods return repository-level sentinel errors (ErrNotFound, ErrDuplicateKey)
@@ -112,10 +112,4 @@ func (r *userRepository) IncrementCounter(id uint, column string, delta int) err
 
 func (r *userRepository) Delete(id uint) error {
 	return r.db.Delete(&models.User{}, id).Error
-}
-
-// isDuplicateKeyError checks whether an error is a PostgreSQL unique violation.
-func isDuplicateKeyError(err error) bool {
-	return strings.Contains(err.Error(), "duplicate key") ||
-		strings.Contains(err.Error(), "23505") // PostgreSQL SQLSTATE
 }

@@ -27,6 +27,7 @@ func New(db *gorm.DB, ts *token.Service, mailer email.Sender) *gin.Engine {
 	postRepo    := repository.NewPostRepository(db)
 	commentRepo := repository.NewCommentRepository(db)
 	likeRepo    := repository.NewLikeRepository(db)
+	followRepo  := repository.NewFollowRepository(db)
 
 	// Auth
 	authSvc     := services.NewAuthService(userRepo, ts, mailer)
@@ -48,6 +49,11 @@ func New(db *gorm.DB, ts *token.Service, mailer email.Sender) *gin.Engine {
 	likeSvc     := services.NewLikeService(likeRepo, postRepo, commentRepo)
 	likeHandler := handlers.NewLikeHandler(likeSvc)
 
+	// Follows
+	followSvc     := services.NewFollowService(followRepo, userRepo)
+	followHandler := handlers.NewFollowHandler(followSvc)
+
+
 	// ── Health check ──────────────────────────────────────────────────────────
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
@@ -66,20 +72,29 @@ func New(db *gorm.DB, ts *token.Service, mailer email.Sender) *gin.Engine {
 		}
 
 		// ── Public read-only resources ────────────────────────────────────────
-		v1.GET("/users/:username",       userHandler.GetUserByUsername)
-		v1.GET("/users/:username/posts", postHandler.ListUserPosts)
-		v1.GET("/posts",                 postHandler.ListFeed)
-		v1.GET("/posts/:id",             postHandler.GetPost)
-		v1.GET("/posts/:id/comments",    commentHandler.ListComments)
-		v1.GET("/comments/:cid/replies", commentHandler.ListReplies)
+		v1.GET("/users/:username",           userHandler.GetUserByUsername)
+		v1.GET("/users/:username/posts",     postHandler.ListUserPosts)
+		v1.GET("/users/:username/followers", followHandler.ListFollowers)
+		v1.GET("/users/:username/following", followHandler.ListFollowing)
+		v1.GET("/posts",                     postHandler.ListFeed)
+		v1.GET("/posts/:id",                 postHandler.GetPost)
+		v1.GET("/posts/:id/comments",        commentHandler.ListComments)
+		v1.GET("/comments/:cid/replies",     commentHandler.ListReplies)
 
 		// ── Protected routes (JWT required) ───────────────────────────────────
 		protected := v1.Group("/")
 		protected.Use(middleware.AuthRequired(ts))
 		{
 			// User profile
-			protected.GET("/users/me",   userHandler.GetMe)
-			protected.PATCH("/users/me", userHandler.UpdateMe)
+			protected.GET("/users/me",             userHandler.GetMe)
+			protected.PATCH("/users/me",           userHandler.UpdateMe)
+			protected.GET("/users/me/followers",   followHandler.GetMyFollowers)
+			protected.GET("/users/me/following",   followHandler.GetMyFollowing)
+
+			// Follows (protected mutations)
+			protected.POST("/users/:username/follow",   followHandler.Follow)
+			protected.DELETE("/users/:username/follow", followHandler.Unfollow)
+			protected.GET("/users/:username/follow",    followHandler.CheckFollowing)
 
 			// Posts
 			protected.POST("/posts",          postHandler.CreatePost)
