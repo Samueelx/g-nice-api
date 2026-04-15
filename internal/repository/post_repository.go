@@ -19,6 +19,9 @@ type PostRepository interface {
 	UpdateFields(id uint, fields map[string]interface{}) error
 	IncrementCounter(id uint, column string, delta int) error
 	Delete(id uint) error
+	// Search performs a case-insensitive search on post content (public posts only).
+	// Results are ordered by created_at DESC. Author is preloaded.
+	Search(query string, limit, offset int) ([]models.Post, int64, error)
 }
 
 type postRepository struct {
@@ -119,4 +122,28 @@ func (r *postRepository) Delete(id uint) error {
 		return ErrNotFound
 	}
 	return nil
+}
+
+// Search performs a case-insensitive infix search on post content.
+// Only public posts are searched; Author is preloaded for each result.
+func (r *postRepository) Search(query string, limit, offset int) ([]models.Post, int64, error) {
+	var posts []models.Post
+	var total int64
+
+	pattern := "%" + query + "%"
+	base := r.db.Model(&models.Post{}).
+		Where("content ILIKE ? AND is_public = ?", pattern, true)
+
+	if err := base.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	err := base.
+		Preload("Author").
+		Order("created_at DESC").
+		Limit(limit).
+		Offset(offset).
+		Find(&posts).Error
+
+	return posts, total, err
 }

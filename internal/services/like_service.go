@@ -33,6 +33,7 @@ type likeService struct {
 	likeRepo    repository.LikeRepository
 	postRepo    repository.PostRepository
 	commentRepo repository.CommentRepository
+	notifSvc    NotificationService
 }
 
 // NewLikeService constructs a LikeService.
@@ -40,11 +41,13 @@ func NewLikeService(
 	likeRepo repository.LikeRepository,
 	postRepo repository.PostRepository,
 	commentRepo repository.CommentRepository,
+	notifSvc NotificationService,
 ) LikeService {
 	return &likeService{
 		likeRepo:    likeRepo,
 		postRepo:    postRepo,
 		commentRepo: commentRepo,
+		notifSvc:    notifSvc,
 	}
 }
 
@@ -73,6 +76,8 @@ func (s *likeService) TogglePostLike(userID, postID uint) (*LikeResult, error) {
 			return nil, err
 		}
 		_ = s.postRepo.IncrementCounter(postID, "likes_count", 1)
+		// Best-effort: notify the post author.
+		_ = s.notifSvc.Notify(post.UserID, userID, models.NotifTypeLikePost, &postID, "post")
 		return &LikeResult{Liked: true, LikesCount: post.LikesCount + 1}, nil
 	}
 	if err != nil {
@@ -115,6 +120,8 @@ func (s *likeService) ToggleCommentLike(userID, commentID uint) (*LikeResult, er
 			return nil, err
 		}
 		_ = s.commentRepo.IncrementCounter(commentID, "likes_count", 1)
+		// Best-effort: notify the comment author.
+		_ = s.notifSvc.Notify(comment.UserID, userID, models.NotifTypeLikeComment, &commentID, "comment")
 		return &LikeResult{Liked: true, LikesCount: comment.LikesCount + 1}, nil
 	}
 	if err != nil {

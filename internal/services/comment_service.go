@@ -51,16 +51,22 @@ type CommentService interface {
 type commentService struct {
 	commentRepo repository.CommentRepository
 	postRepo    repository.PostRepository
+	notifSvc    NotificationService
 }
 
 // NewCommentService constructs a CommentService.
-func NewCommentService(commentRepo repository.CommentRepository, postRepo repository.PostRepository) CommentService {
-	return &commentService{commentRepo: commentRepo, postRepo: postRepo}
+func NewCommentService(
+	commentRepo repository.CommentRepository,
+	postRepo repository.PostRepository,
+	notifSvc NotificationService,
+) CommentService {
+	return &commentService{commentRepo: commentRepo, postRepo: postRepo, notifSvc: notifSvc}
 }
 
 func (s *commentService) CreateComment(userID, postID uint, req *CreateCommentRequest) (*models.Comment, error) {
-	// Verify the post exists.
-	if _, err := s.postRepo.FindByID(postID); errors.Is(err, repository.ErrNotFound) {
+	// Verify the post exists and capture it to read its author.
+	post, err := s.postRepo.FindByID(postID)
+	if errors.Is(err, repository.ErrNotFound) {
 		return nil, ErrPostNotFound
 	} else if err != nil {
 		return nil, err
@@ -75,8 +81,9 @@ func (s *commentService) CreateComment(userID, postID uint, req *CreateCommentRe
 		return nil, err
 	}
 
-	// Best-effort: increment post's comment counter.
+	// Best-effort: increment post's comment counter and notify the post author.
 	_ = s.postRepo.IncrementCounter(postID, "comments_count", 1)
+	_ = s.notifSvc.Notify(post.UserID, userID, models.NotifTypeComment, &postID, "post")
 
 	return s.commentRepo.FindByIDWithAuthor(comment.ID)
 }
@@ -104,8 +111,9 @@ func (s *commentService) CreateReply(userID, postID, parentID uint, req *CreateC
 		return nil, err
 	}
 
-	// Best-effort: bump the post's comment counter.
+	// Best-effort: bump the post's comment counter and notify the parent comment's author.
 	_ = s.postRepo.IncrementCounter(postID, "comments_count", 1)
+	_ = s.notifSvc.Notify(parent.UserID, userID, models.NotifTypeReply, &parentID, "comment")
 
 	return s.commentRepo.FindByIDWithAuthor(comment.ID)
 }

@@ -57,11 +57,16 @@ type FollowService interface {
 type followService struct {
 	followRepo repository.FollowRepository
 	userRepo   repository.UserRepository
+	notifSvc   NotificationService
 }
 
 // NewFollowService constructs a FollowService.
-func NewFollowService(followRepo repository.FollowRepository, userRepo repository.UserRepository) FollowService {
-	return &followService{followRepo: followRepo, userRepo: userRepo}
+func NewFollowService(
+	followRepo repository.FollowRepository,
+	userRepo repository.UserRepository,
+	notifSvc NotificationService,
+) FollowService {
+	return &followService{followRepo: followRepo, userRepo: userRepo, notifSvc: notifSvc}
 }
 
 // Follow creates a follower → followee edge.
@@ -103,6 +108,8 @@ func (s *followService) Follow(followerID uint, followeeUsername string) (*Follo
 	// Update both counter columns — best-effort.
 	_ = s.userRepo.IncrementCounter(followee.ID, "followers_count", 1)
 	_ = s.userRepo.IncrementCounter(followerID, "following_count", 1)
+	// Best-effort: notify the followee.
+	_ = s.notifSvc.Notify(followee.ID, followerID, models.NotifTypeFollow, nil, "")
 
 	return &FollowResult{Following: true, FollowersCount: followee.FollowersCount + 1}, nil
 }

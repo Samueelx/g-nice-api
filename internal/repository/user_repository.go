@@ -24,6 +24,9 @@ type UserRepository interface {
 	// IncrementCounter atomically adjusts a numeric column by delta (use -1 to decrement).
 	IncrementCounter(id uint, column string, delta int) error
 	Delete(id uint) error
+	// Search performs a case-insensitive search on username and display_name.
+	// Results are ordered by followers_count DESC, then username ASC.
+	Search(query string, limit, offset int) ([]models.User, int64, error)
 }
 
 type userRepository struct {
@@ -112,4 +115,27 @@ func (r *userRepository) IncrementCounter(id uint, column string, delta int) err
 
 func (r *userRepository) Delete(id uint) error {
 	return r.db.Delete(&models.User{}, id).Error
+}
+
+// Search performs a case-insensitive prefix/infix search across username and display_name.
+// Results are ranked by followers_count DESC so prominent accounts surface first.
+func (r *userRepository) Search(query string, limit, offset int) ([]models.User, int64, error) {
+	var users []models.User
+	var total int64
+
+	pattern := "%" + query + "%"
+	base := r.db.Model(&models.User{}).
+		Where("username ILIKE ? OR display_name ILIKE ?", pattern, pattern)
+
+	if err := base.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	err := base.
+		Order("followers_count DESC, username ASC").
+		Limit(limit).
+		Offset(offset).
+		Find(&users).Error
+
+	return users, total, err
 }

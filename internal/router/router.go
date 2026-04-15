@@ -28,6 +28,11 @@ func New(db *gorm.DB, ts *token.Service, mailer email.Sender) *gin.Engine {
 	commentRepo := repository.NewCommentRepository(db)
 	likeRepo    := repository.NewLikeRepository(db)
 	followRepo  := repository.NewFollowRepository(db)
+	notifRepo   := repository.NewNotificationRepository(db)
+
+	// Notifications (constructed first — other services depend on it)
+	notifSvc     := services.NewNotificationService(notifRepo)
+	notifHandler := handlers.NewNotificationHandler(notifSvc)
 
 	// Auth
 	authSvc     := services.NewAuthService(userRepo, ts, mailer)
@@ -42,16 +47,20 @@ func New(db *gorm.DB, ts *token.Service, mailer email.Sender) *gin.Engine {
 	postHandler := handlers.NewPostHandler(postSvc)
 
 	// Comments
-	commentSvc     := services.NewCommentService(commentRepo, postRepo)
+	commentSvc     := services.NewCommentService(commentRepo, postRepo, notifSvc)
 	commentHandler := handlers.NewCommentHandler(commentSvc)
 
 	// Likes
-	likeSvc     := services.NewLikeService(likeRepo, postRepo, commentRepo)
+	likeSvc     := services.NewLikeService(likeRepo, postRepo, commentRepo, notifSvc)
 	likeHandler := handlers.NewLikeHandler(likeSvc)
 
 	// Follows
-	followSvc     := services.NewFollowService(followRepo, userRepo)
+	followSvc     := services.NewFollowService(followRepo, userRepo, notifSvc)
 	followHandler := handlers.NewFollowHandler(followSvc)
+
+	// Search
+	searchSvc     := services.NewSearchService(userRepo, postRepo)
+	searchHandler := handlers.NewSearchHandler(searchSvc)
 
 
 	// ── Health check ──────────────────────────────────────────────────────────
@@ -80,6 +89,7 @@ func New(db *gorm.DB, ts *token.Service, mailer email.Sender) *gin.Engine {
 		v1.GET("/posts/:id",                 postHandler.GetPost)
 		v1.GET("/posts/:id/comments",        commentHandler.ListComments)
 		v1.GET("/comments/:cid/replies",     commentHandler.ListReplies)
+		v1.GET("/search",                    searchHandler.Search)
 
 		// ── Protected routes (JWT required) ───────────────────────────────────
 		protected := v1.Group("/")
@@ -108,8 +118,16 @@ func New(db *gorm.DB, ts *token.Service, mailer email.Sender) *gin.Engine {
 			protected.DELETE("/comments/:cid",                     commentHandler.DeleteComment)
 
 			// Likes (toggle)
-			protected.POST("/posts/:id/like",    likeHandler.TogglePostLike)
+			protected.POST("/posts/:id/like",     likeHandler.TogglePostLike)
 			protected.POST("/comments/:cid/like", likeHandler.ToggleCommentLike)
+
+			// Notifications
+			// NOTE: read-all must be registered before /:nid to avoid Gin routing it as an ID.
+			protected.GET("/notifications",                notifHandler.List)
+			protected.GET("/notifications/unread-count",   notifHandler.UnreadCount)
+			protected.PATCH("/notifications/read-all",     notifHandler.MarkAllRead)
+			protected.PATCH("/notifications/:nid/read",    notifHandler.MarkRead)
+			protected.DELETE("/notifications/:nid",        notifHandler.Delete)
 		}
 	}
 
