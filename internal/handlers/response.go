@@ -56,3 +56,13 @@ func InternalError(c *gin.Context) {
 		Error:   "an unexpected error occurred",
 	})
 }
+
+// TooLarge sends a 413 response (file exceeds the size limit).
+func TooLarge(c *gin.Context, msg string) {
+	c.JSON(http.StatusRequestEntityTooLarge, APIResponse{Success: false, Error: msg})
+}
+
+// UnsupportedMediaType sends a 415 response (unacceptable file type).
+func UnsupportedMediaType(c *gin.Context, msg string) {
+	c.JSON(http.StatusUnsupportedMediaType, APIResponse{Success: false, Error: msg})
+}

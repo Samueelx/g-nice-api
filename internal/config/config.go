@@ -18,6 +18,12 @@ type Config struct {
 	GinMode    string
 	ResendAPIKey string
 	EmailFrom    string
+
+	// S3 media storage
+	AWSAccessKeyID     string
+	AWSSecretAccessKey string
+	AWSRegion          string
+	AWSS3Bucket        string
 }
 
 // Load reads environment variables and returns a Config.
@@ -35,6 +41,12 @@ func Load() (*Config, error) {
 		GinMode:      getEnv("GIN_MODE", "debug"),
 		ResendAPIKey: getEnv("RESEND_API_KEY", ""),
 		EmailFrom:    getEnv("EMAIL_FROM", ""),
+
+		// S3
+		AWSAccessKeyID:     getEnv("AWS_ACCESS_KEY_ID", ""),
+		AWSSecretAccessKey: getEnv("AWS_SECRET_ACCESS_KEY", ""),
+		AWSRegion:          getEnv("AWS_REGION", "af-south-1"),
+		AWSS3Bucket:        getEnv("AWS_S3_BUCKET", "g-nice-media"),
 	}
 
 	if cfg.DBPassword == "" {
@@ -48,6 +60,12 @@ func Load() (*Config, error) {
 	}
 	if cfg.EmailFrom == "" {
 		return nil, fmt.Errorf("EMAIL_FROM is required")
+	}
+	if cfg.AWSAccessKeyID == "" {
+		return nil, fmt.Errorf("AWS_ACCESS_KEY_ID is required")
+	}
+	if cfg.AWSSecretAccessKey == "" {
+		return nil, fmt.Errorf("AWS_SECRET_ACCESS_KEY is required")
 	}
 
 	return cfg, nil

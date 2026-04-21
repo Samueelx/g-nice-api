@@ -1,21 +1,27 @@
 package router
 
 import (
+	"log"
 	"net/http"
 
+	"github.com/Samueelx/g-nice-api/internal/config"
 	"github.com/Samueelx/g-nice-api/internal/email"
 	"github.com/Samueelx/g-nice-api/internal/handlers"
 	"github.com/Samueelx/g-nice-api/internal/middleware"
 	"github.com/Samueelx/g-nice-api/internal/repository"
 	"github.com/Samueelx/g-nice-api/internal/services"
+	"github.com/Samueelx/g-nice-api/internal/storage"
 	"github.com/Samueelx/g-nice-api/internal/token"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
 
 // New creates and configures the Gin engine with all middleware and routes.
-func New(db *gorm.DB, ts *token.Service, mailer email.Sender) *gin.Engine {
+func New(db *gorm.DB, ts *token.Service, mailer email.Sender, cfg *config.Config) *gin.Engine {
 	r := gin.New()
+
+	// Enforce 10 MB multipart limit — must match the UploadService constant.
+	r.MaxMultipartMemory = 10 << 20
 
 	// ── Global middleware ─────────────────────────────────────────────────────
 	r.Use(gin.Logger())
@@ -61,6 +67,19 @@ func New(db *gorm.DB, ts *token.Service, mailer email.Sender) *gin.Engine {
 	// Search
 	searchSvc     := services.NewSearchService(userRepo, postRepo)
 	searchHandler := handlers.NewSearchHandler(searchSvc)
+
+	// Media uploads (S3)
+	s3Store, err := storage.NewS3Storage(storage.S3Config{
+		AccessKeyID:     cfg.AWSAccessKeyID,
+		SecretAccessKey: cfg.AWSSecretAccessKey,
+		Region:          cfg.AWSRegion,
+		Bucket:          cfg.AWSS3Bucket,
+	})
+	if err != nil {
+		log.Fatalf("❌ Failed to initialise S3 storage: %v", err)
+	}
+	uploadSvc     := services.NewUploadService(s3Store)
+	uploadHandler := handlers.NewUploadHandler(uploadSvc)
 
 
 	// ── Health check ──────────────────────────────────────────────────────────
@@ -128,6 +147,9 @@ func New(db *gorm.DB, ts *token.Service, mailer email.Sender) *gin.Engine {
 			protected.PATCH("/notifications/read-all",     notifHandler.MarkAllRead)
 			protected.PATCH("/notifications/:nid/read",    notifHandler.MarkRead)
 			protected.DELETE("/notifications/:nid",        notifHandler.Delete)
+
+			// Media uploads
+			protected.POST("/uploads",                     uploadHandler.Upload)
 		}
 	}
 

@@ -53,7 +53,7 @@ func main() {
 	log.Println("✅ Database migrations applied")
 
 	// ── Build router ──────────────────────────────────────────────────────────
-	r := router.New(database, ts, mailer)
+	r := router.New(database, ts, mailer, cfg)
 
 	// ── Start server with graceful shutdown ───────────────────────────────────
 	srv := &http.Server{
