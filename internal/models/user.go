@@ -22,6 +22,10 @@ type User struct {
 	OTPExpiry       *time.Time `                                      json:"-"`
 	OTPAttempts     int        `gorm:"default:0"                     json:"-"`
 
+	// Session management
+	RefreshTokenHash   string     `gorm:"size:64"                       json:"-"`
+	RefreshTokenExpiry *time.Time `                                      json:"-"`
+
 	// Denormalised counters — updated via service layer; avoids expensive COUNT(*) on hot paths.
 	PostsCount     int `gorm:"default:0" json:"posts_count"`
 	FollowersCount int `gorm:"default:0" json:"followers_count"`

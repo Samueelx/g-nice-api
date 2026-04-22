@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/Samueelx/g-nice-api/internal/email"
@@ -50,10 +52,16 @@ type LoginRequest struct {
 	Password string `json:"password" binding:"required"`
 }
 
-// AuthResponse is returned after a successful OTP verification or login.
+// RefreshRequest is the payload for POST /auth/refresh.
+type RefreshRequest struct {
+	RefreshToken string `json:"refresh_token" binding:"required"`
+}
+
+// AuthResponse is returned after a successful OTP verification, login, or refresh.
 type AuthResponse struct {
-	Token string       `json:"token"`
-	User  *models.User `json:"user"`
+	Token        string       `json:"token"`
+	RefreshToken string       `json:"refresh_token"`
+	User         *models.User `json:"user"`
 }
 
 // ── Sentinel errors ───────────────────────────────────────────────────────────
@@ -62,11 +70,12 @@ var (
 	ErrEmailTaken      = errors.New("email is already in use")
 	ErrUsernameTaken   = errors.New("username is already taken")
 	ErrInvalidCreds    = errors.New("invalid email or password")
-	ErrNotVerified     = errors.New("email address is not verified")
-	ErrAlreadyVerified = errors.New("email address is already verified")
-	ErrInvalidOTP      = errors.New("invalid or incorrect verification code")
-	ErrOTPExpired      = errors.New("verification code has expired")
-	ErrOTPMaxAttempts  = errors.New("too many incorrect attempts — please request a new code")
+	ErrNotVerified         = errors.New("email address is not verified")
+	ErrAlreadyVerified     = errors.New("email address is already verified")
+	ErrInvalidOTP          = errors.New("invalid or incorrect verification code")
+	ErrOTPExpired          = errors.New("verification code has expired")
+	ErrOTPMaxAttempts      = errors.New("too many incorrect attempts — please request a new code")
+	ErrInvalidRefreshToken = errors.New("invalid or expired refresh token")
 )
 
 const (
@@ -84,6 +93,7 @@ type AuthService interface {
 	VerifyOTP(req *VerifyOTPRequest) (*AuthResponse, error)
 	ResendOTP(req *ResendOTPRequest) error
 	Login(req *LoginRequest) (*AuthResponse, error)
+	Refresh(req *RefreshRequest) (*AuthResponse, error)
 }
 
 // ── Implementation ────────────────────────────────────────────────────────────
@@ -214,7 +224,20 @@ func (s *authService) VerifyOTP(req *VerifyOTPRequest) (*AuthResponse, error) {
 		return nil, err
 	}
 
-	return &AuthResponse{Token: t, User: user}, nil
+	rtPlain, rtHash, err := generateRefreshToken(user.ID)
+	if err != nil {
+		return nil, err
+	}
+	rtExpiry := time.Now().Add(7 * 24 * time.Hour)
+
+	if err := s.userRepo.UpdateFields(user.ID, map[string]interface{}{
+		"refresh_token_hash":   rtHash,
+		"refresh_token_expiry": rtExpiry,
+	}); err != nil {
+		return nil, err
+	}
+
+	return &AuthResponse{Token: t, RefreshToken: rtPlain, User: user}, nil
 }
 
 // ResendOTP generates a fresh OTP and resends the verification email.
@@ -285,7 +308,76 @@ func (s *authService) Login(req *LoginRequest) (*AuthResponse, error) {
 		return nil, err
 	}
 
-	return &AuthResponse{Token: t, User: user}, nil
+	rtPlain, rtHash, err := generateRefreshToken(user.ID)
+	if err != nil {
+		return nil, err
+	}
+	rtExpiry := time.Now().Add(7 * 24 * time.Hour)
+
+	if err := s.userRepo.UpdateFields(user.ID, map[string]interface{}{
+		"refresh_token_hash":   rtHash,
+		"refresh_token_expiry": rtExpiry,
+	}); err != nil {
+		return nil, err
+	}
+
+	return &AuthResponse{Token: t, RefreshToken: rtPlain, User: user}, nil
+}
+
+// Refresh validates a refresh token and issues a new access token and refresh token.
+func (s *authService) Refresh(req *RefreshRequest) (*AuthResponse, error) {
+	// Parse the userID from the token: "<userID>:<randomHex>"
+	parts := strings.Split(req.RefreshToken, ":")
+	if len(parts) != 2 {
+		return nil, ErrInvalidRefreshToken
+	}
+
+	userIDInt, err := strconv.ParseUint(parts[0], 10, 32)
+	if err != nil {
+		return nil, ErrInvalidRefreshToken
+	}
+	userID := uint(userIDInt)
+
+	user, err := s.userRepo.FindByID(userID)
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return nil, ErrInvalidRefreshToken
+		}
+		return nil, err
+	}
+
+	// Validate expiry
+	if user.RefreshTokenExpiry == nil || time.Now().After(*user.RefreshTokenExpiry) {
+		return nil, ErrInvalidRefreshToken
+	}
+
+	// Validate hash
+	hash := sha256.Sum256([]byte(req.RefreshToken))
+	hashStr := hex.EncodeToString(hash[:])
+	if hashStr != user.RefreshTokenHash {
+		return nil, ErrInvalidRefreshToken
+	}
+
+	// Token is valid, rotate it
+	t, err := s.tokens.Generate(user.ID, user.Email)
+	if err != nil {
+		return nil, err
+	}
+
+	rtPlain, rtHash, err := generateRefreshToken(user.ID)
+	if err != nil {
+		return nil, err
+	}
+	rtExpiry := time.Now().Add(7 * 24 * time.Hour)
+
+	if err := s.userRepo.UpdateFields(user.ID, map[string]interface{}{
+		"refresh_token_hash":   rtHash,
+		"refresh_token_expiry": rtExpiry,
+	}); err != nil {
+		return nil, err
+	}
+
+	return &AuthResponse{Token: t, RefreshToken: rtPlain, User: user}, nil
 }
 
 // ── OTP helpers ───────────────────────────────────────────────────────────────
@@ -305,4 +397,18 @@ func generateOTP() (plaintext, hash string, err error) {
 func hashOTP(code string) string {
 	sum := sha256.Sum256([]byte(code))
 	return hex.EncodeToString(sum[:])
+}
+
+// generateRefreshToken returns a secure opaque token (prefixed with userID) and its hash.
+func generateRefreshToken(userID uint) (string, string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", "", fmt.Errorf("generate refresh token: %w", err)
+	}
+	randomHex := hex.EncodeToString(b)
+	plaintext := fmt.Sprintf("%d:%s", userID, randomHex)
+	
+	// Hash the entire string
+	hash := sha256.Sum256([]byte(plaintext))
+	return plaintext, hex.EncodeToString(hash[:]), nil
 }

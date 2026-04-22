@@ -9,7 +9,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-const defaultExpiry = 7 * 24 * time.Hour // 7 days
+const defaultExpiry = 15 * time.Minute // 15 minutes for access token
 
 // Claims is the JWT payload shared between token generation and middleware validation.
 type Claims struct {

@@ -97,6 +97,7 @@ func New(db *gorm.DB, ts *token.Service, mailer email.Sender, cfg *config.Config
 			auth.POST("/verify-otp",     authHandler.VerifyOTP)
 			auth.POST("/resend-otp",     authHandler.ResendOTP)
 			auth.POST("/login",          authHandler.Login)
+			auth.POST("/refresh",        authHandler.Refresh)
 		}
 
 		// ── Public read-only resources ────────────────────────────────────────

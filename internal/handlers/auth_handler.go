@@ -136,3 +136,28 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	OK(c, resp)
 }
+
+// Refresh godoc
+// POST /api/v1/auth/refresh
+// Body: { refresh_token }
+func (h *AuthHandler) Refresh(c *gin.Context) {
+	var req services.RefreshRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		BadRequest(c, err.Error())
+		return
+	}
+
+	resp, err := h.authSvc.Refresh(&req)
+	if err != nil {
+		switch {
+		case errors.Is(err, services.ErrInvalidRefreshToken):
+			Unauthorized(c, "invalid or expired refresh token")
+		default:
+			log.Printf("refresh error: %v", err)
+			InternalError(c)
+		}
+		return
+	}
+
+	OK(c, resp)
+}

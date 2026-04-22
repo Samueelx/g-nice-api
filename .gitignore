@@ -16,3 +16,6 @@ Thumbs.db
 
 # ── Go toolchain ──────────────────────────────────────────────────────────────
 vendor/
+
+GEMINI.md
+api_endpoints.txt
