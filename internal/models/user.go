@@ -15,6 +15,7 @@ type User struct {
 	AvatarURL    string  `gorm:"size:500"                      json:"avatar_url"`
 	IsVerified   bool    `gorm:"default:false"                 json:"is_verified"`
 	IsPrivate    bool    `gorm:"default:false"                 json:"is_private"`
+	IsAdmin      bool    `gorm:"default:false"                 json:"-"`
 
 	// Email verification via OTP
 	IsEmailVerified bool       `gorm:"default:false;index"           json:"is_email_verified"`

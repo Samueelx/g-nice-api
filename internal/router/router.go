@@ -68,6 +68,11 @@ func New(db *gorm.DB, ts *token.Service, mailer email.Sender, cfg *config.Config
 	searchSvc     := services.NewSearchService(userRepo, postRepo)
 	searchHandler := handlers.NewSearchHandler(searchSvc)
 
+	// Events
+	eventRepo    := repository.NewEventRepository(db)
+	eventSvc     := services.NewEventService(eventRepo)
+	eventHandler := handlers.NewEventHandler(eventSvc)
+
 	// Media uploads (S3)
 	s3Store, err := storage.NewS3Storage(storage.S3Config{
 		AccessKeyID:     cfg.AWSAccessKeyID,
@@ -110,6 +115,8 @@ func New(db *gorm.DB, ts *token.Service, mailer email.Sender, cfg *config.Config
 		v1.GET("/posts/:id/comments",        commentHandler.ListComments)
 		v1.GET("/comments/:cid/replies",     commentHandler.ListReplies)
 		v1.GET("/search",                    searchHandler.Search)
+		v1.GET("/events",                    eventHandler.List)
+		v1.GET("/events/:id",               eventHandler.GetEvent)
 
 		// ── Protected routes (JWT required) ───────────────────────────────────
 		protected := v1.Group("/")
@@ -151,6 +158,16 @@ func New(db *gorm.DB, ts *token.Service, mailer email.Sender, cfg *config.Config
 
 			// Media uploads
 			protected.POST("/uploads",                     uploadHandler.Upload)
+		}
+
+		// ── Admin-only routes (JWT + IsAdmin required) ────────────────────────
+		admin := v1.Group("/")
+		admin.Use(middleware.AuthRequired(ts))
+		admin.Use(middleware.AdminRequired(userRepo))
+		{
+			admin.POST("/events",       eventHandler.CreateEvent)
+			admin.PATCH("/events/:id",  eventHandler.UpdateEvent)
+			admin.DELETE("/events/:id", eventHandler.DeleteEvent)
 		}
 	}
 
