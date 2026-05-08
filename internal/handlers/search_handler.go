@@ -19,9 +19,9 @@ func NewSearchHandler(searchSvc services.SearchService) *SearchHandler {
 
 // Search godoc
 //
-//	GET /api/v1/search?q=<term>&type=all|users|posts&page=1&page_size=20
+//	GET /api/v1/search?q=<term>&type=all|users|posts|events&page=1&page_size=20
 //
-// Returns a unified search result containing users and/or posts that match the query.
+// Returns a unified search result containing users, posts, and/or events that match the query.
 // The `type` parameter controls which resources are searched (default: all).
 // This endpoint is public and does not require authentication.
 func (h *SearchHandler) Search(c *gin.Context) {

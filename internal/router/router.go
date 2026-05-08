@@ -64,14 +64,14 @@ func New(db *gorm.DB, ts *token.Service, mailer email.Sender, cfg *config.Config
 	followSvc     := services.NewFollowService(followRepo, userRepo, notifSvc)
 	followHandler := handlers.NewFollowHandler(followSvc)
 
-	// Search
-	searchSvc     := services.NewSearchService(userRepo, postRepo)
-	searchHandler := handlers.NewSearchHandler(searchSvc)
-
-	// Events
+	// Events (declared before Search — searchSvc depends on eventRepo)
 	eventRepo    := repository.NewEventRepository(db)
 	eventSvc     := services.NewEventService(eventRepo)
 	eventHandler := handlers.NewEventHandler(eventSvc)
+
+	// Search
+	searchSvc     := services.NewSearchService(userRepo, postRepo, eventRepo)
+	searchHandler := handlers.NewSearchHandler(searchSvc)
 
 	// Media uploads (S3)
 	s3Store, err := storage.NewS3Storage(storage.S3Config{

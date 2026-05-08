@@ -15,18 +15,20 @@ import (
 type SearchType string
 
 const (
-	SearchAll   SearchType = "all"
-	SearchUsers SearchType = "users"
-	SearchPosts SearchType = "posts"
+	SearchAll    SearchType = "all"
+	SearchUsers  SearchType = "users"
+	SearchPosts  SearchType = "posts"
+	SearchEvents SearchType = "events"
 )
 
 // SearchResult is the unified response envelope returned by SearchService.
-// The Users and Posts fields are omitted from JSON when not requested.
+// The Users, Posts, and Events fields are omitted from JSON when not requested.
 type SearchResult struct {
-	Query string                         `json:"query"`
-	Type  SearchType                     `json:"type"`
-	Users *pagination.Page[models.User]  `json:"users,omitempty"`
-	Posts *pagination.Page[models.Post]  `json:"posts,omitempty"`
+	Query  string                          `json:"query"`
+	Type   SearchType                      `json:"type"`
+	Users  *pagination.Page[models.User]   `json:"users,omitempty"`
+	Posts  *pagination.Page[models.Post]   `json:"posts,omitempty"`
+	Events *pagination.Page[models.Event]  `json:"events,omitempty"`
 }
 
 // ── Sentinel errors ───────────────────────────────────────────────────────────
@@ -35,23 +37,24 @@ var ErrSearchQueryEmpty = errors.New("search query must not be empty")
 
 // ── Interface ─────────────────────────────────────────────────────────────────
 
-// SearchService handles search business logic across users and posts.
+// SearchService handles search business logic across users, posts, and events.
 type SearchService interface {
-	// Search searches users and/or posts depending on searchType.
-	// When searchType is SearchAll both repos are queried concurrently.
+	// Search searches users, posts, and/or events depending on searchType.
+	// When searchType is SearchAll all three repos are queried concurrently.
 	Search(query string, searchType SearchType, page, pageSize int) (*SearchResult, error)
 }
 
 // ── Implementation ────────────────────────────────────────────────────────────
 
 type searchService struct {
-	userRepo repository.UserRepository
-	postRepo repository.PostRepository
+	userRepo  repository.UserRepository
+	postRepo  repository.PostRepository
+	eventRepo repository.EventRepository
 }
 
 // NewSearchService constructs a SearchService.
-func NewSearchService(userRepo repository.UserRepository, postRepo repository.PostRepository) SearchService {
-	return &searchService{userRepo: userRepo, postRepo: postRepo}
+func NewSearchService(userRepo repository.UserRepository, postRepo repository.PostRepository, eventRepo repository.EventRepository) SearchService {
+	return &searchService{userRepo: userRepo, postRepo: postRepo, eventRepo: eventRepo}
 }
 
 func (s *searchService) Search(query string, searchType SearchType, page, pageSize int) (*SearchResult, error) {
@@ -61,7 +64,7 @@ func (s *searchService) Search(query string, searchType SearchType, page, pageSi
 
 	// Normalise searchType — default to "all" if an unknown value is given.
 	switch searchType {
-	case SearchAll, SearchUsers, SearchPosts:
+	case SearchAll, SearchUsers, SearchPosts, SearchEvents:
 		// valid
 	default:
 		searchType = SearchAll
@@ -89,16 +92,27 @@ func (s *searchService) Search(query string, searchType SearchType, page, pageSi
 		}
 		result.Posts = pagination.New(posts, total, page, pageSize)
 
+	case SearchEvents:
+		events, total, err := s.eventRepo.List(
+			repository.EventFilter{Search: query}, pageSize, offset,
+		)
+		if err != nil {
+			return nil, err
+		}
+		result.Events = pagination.New(events, total, page, pageSize)
+
 	default: // SearchAll — fan out concurrently
 		var (
-			wg        sync.WaitGroup
-			userPage  *pagination.Page[models.User]
-			postPage  *pagination.Page[models.Post]
-			userErr   error
-			postErr   error
+			wg         sync.WaitGroup
+			userPage   *pagination.Page[models.User]
+			postPage   *pagination.Page[models.Post]
+			eventPage  *pagination.Page[models.Event]
+			userErr    error
+			postErr    error
+			eventErr   error
 		)
 
-		wg.Add(2)
+		wg.Add(3)
 
 		go func() {
 			defer wg.Done()
@@ -120,6 +134,18 @@ func (s *searchService) Search(query string, searchType SearchType, page, pageSi
 			postPage = pagination.New(posts, total, page, pageSize)
 		}()
 
+		go func() {
+			defer wg.Done()
+			events, total, err := s.eventRepo.List(
+				repository.EventFilter{Search: query}, pageSize, offset,
+			)
+			if err != nil {
+				eventErr = err
+				return
+			}
+			eventPage = pagination.New(events, total, page, pageSize)
+		}()
+
 		wg.Wait()
 
 		if userErr != nil {
@@ -128,9 +154,13 @@ func (s *searchService) Search(query string, searchType SearchType, page, pageSi
 		if postErr != nil {
 			return nil, postErr
 		}
+		if eventErr != nil {
+			return nil, eventErr
+		}
 
-		result.Users = userPage
-		result.Posts = postPage
+		result.Users  = userPage
+		result.Posts  = postPage
+		result.Events = eventPage
 	}
 
 	return result, nil
