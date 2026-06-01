@@ -10,8 +10,9 @@ import (
 
 // allowedPrefixes restricts the ?type query param to known S3 key prefixes.
 var allowedPrefixes = map[string]bool{
-	"posts":   true,
-	"avatars": true,
+	"posts":    true,
+	"avatars":  true,
+	"sponsors": true,
 }
 
 // UploadHandler handles media file upload requests.
@@ -39,7 +40,7 @@ func (h *UploadHandler) Upload(c *gin.Context) {
 	// Determine the S3 key prefix from the optional ?type query param.
 	prefix := c.DefaultQuery("type", "posts")
 	if !allowedPrefixes[prefix] {
-		BadRequest(c, "invalid type; allowed values: posts, avatars")
+		BadRequest(c, "invalid type; allowed values: posts, avatars, sponsors")
 		return
 	}
 

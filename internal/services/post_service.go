@@ -52,11 +52,12 @@ type PostService interface {
 type postService struct {
 	postRepo repository.PostRepository
 	userRepo repository.UserRepository
+	notifSvc NotificationService
 }
 
 // NewPostService constructs a PostService.
-func NewPostService(postRepo repository.PostRepository, userRepo repository.UserRepository) PostService {
-	return &postService{postRepo: postRepo, userRepo: userRepo}
+func NewPostService(postRepo repository.PostRepository, userRepo repository.UserRepository, notifSvc NotificationService) PostService {
+	return &postService{postRepo: postRepo, userRepo: userRepo, notifSvc: notifSvc}
 }
 
 // CreatePost creates a new post and increments the author's post counter.
@@ -80,6 +81,10 @@ func (s *postService) CreatePost(userID uint, req *CreatePostRequest) (*models.P
 
 	// Increment author's post count — best-effort (non-fatal if it fails)
 	_ = s.userRepo.IncrementCounter(userID, "posts_count", 1)
+
+	// Dispatch mention notifications off the request path — best-effort.
+	postID := post.ID
+	go dispatchMentions(req.Content, userID, &postID, "post", s.userRepo, s.notifSvc)
 
 	// Return with author preloaded so the frontend has everything it needs.
 	return s.postRepo.FindByIDWithAuthor(post.ID)

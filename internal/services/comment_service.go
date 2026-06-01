@@ -52,6 +52,7 @@ type commentService struct {
 	commentRepo repository.CommentRepository
 	postRepo    repository.PostRepository
 	notifSvc    NotificationService
+	userRepo    repository.UserRepository
 }
 
 // NewCommentService constructs a CommentService.
@@ -59,8 +60,9 @@ func NewCommentService(
 	commentRepo repository.CommentRepository,
 	postRepo repository.PostRepository,
 	notifSvc NotificationService,
+	userRepo repository.UserRepository,
 ) CommentService {
-	return &commentService{commentRepo: commentRepo, postRepo: postRepo, notifSvc: notifSvc}
+	return &commentService{commentRepo: commentRepo, postRepo: postRepo, notifSvc: notifSvc, userRepo: userRepo}
 }
 
 func (s *commentService) CreateComment(userID, postID uint, req *CreateCommentRequest) (*models.Comment, error) {
@@ -84,6 +86,10 @@ func (s *commentService) CreateComment(userID, postID uint, req *CreateCommentRe
 	// Best-effort: increment post's comment counter and notify the post author.
 	_ = s.postRepo.IncrementCounter(postID, "comments_count", 1)
 	_ = s.notifSvc.Notify(post.UserID, userID, models.NotifTypeComment, &postID, "post")
+
+	// Dispatch mention notifications off the request path — best-effort.
+	commentID := comment.ID
+	go dispatchMentions(req.Content, userID, &commentID, "comment", s.userRepo, s.notifSvc)
 
 	return s.commentRepo.FindByIDWithAuthor(comment.ID)
 }
@@ -114,6 +120,10 @@ func (s *commentService) CreateReply(userID, postID, parentID uint, req *CreateC
 	// Best-effort: bump the post's comment counter and notify the parent comment's author.
 	_ = s.postRepo.IncrementCounter(postID, "comments_count", 1)
 	_ = s.notifSvc.Notify(parent.UserID, userID, models.NotifTypeReply, &parentID, "comment")
+
+	// Dispatch mention notifications off the request path — best-effort.
+	commentID := comment.ID
+	go dispatchMentions(req.Content, userID, &commentID, "comment", s.userRepo, s.notifSvc)
 
 	return s.commentRepo.FindByIDWithAuthor(comment.ID)
 }

@@ -35,6 +35,8 @@ func New(db *gorm.DB, ts *token.Service, mailer email.Sender, cfg *config.Config
 	likeRepo    := repository.NewLikeRepository(db)
 	followRepo  := repository.NewFollowRepository(db)
 	notifRepo   := repository.NewNotificationRepository(db)
+	jokeRepo    := repository.NewJokeRepository(db)
+	jokeCommentRepo := repository.NewJokeCommentRepository(db)
 
 	// Notifications (constructed first — other services depend on it)
 	notifSvc     := services.NewNotificationService(notifRepo)
@@ -49,11 +51,11 @@ func New(db *gorm.DB, ts *token.Service, mailer email.Sender, cfg *config.Config
 	userHandler := handlers.NewUserHandler(userSvc)
 
 	// Posts
-	postSvc     := services.NewPostService(postRepo, userRepo)
+	postSvc     := services.NewPostService(postRepo, userRepo, notifSvc)
 	postHandler := handlers.NewPostHandler(postSvc)
 
 	// Comments
-	commentSvc     := services.NewCommentService(commentRepo, postRepo, notifSvc)
+	commentSvc     := services.NewCommentService(commentRepo, postRepo, notifSvc, userRepo)
 	commentHandler := handlers.NewCommentHandler(commentSvc)
 
 	// Likes
@@ -63,6 +65,12 @@ func New(db *gorm.DB, ts *token.Service, mailer email.Sender, cfg *config.Config
 	// Follows
 	followSvc     := services.NewFollowService(followRepo, userRepo, notifSvc)
 	followHandler := handlers.NewFollowHandler(followSvc)
+
+	// Jokes (Jumbotron)
+	jokeSvc            := services.NewJokeService(jokeRepo)
+	jokeHandler        := handlers.NewJokeHandler(jokeSvc)
+	jokeCommentSvc     := services.NewJokeCommentService(jokeCommentRepo, jokeRepo, notifSvc, userRepo)
+	jokeCommentHandler := handlers.NewJokeCommentHandler(jokeCommentSvc)
 
 	// Events (declared before Search — searchSvc depends on eventRepo)
 	eventRepo    := repository.NewEventRepository(db)
@@ -118,6 +126,11 @@ func New(db *gorm.DB, ts *token.Service, mailer email.Sender, cfg *config.Config
 		v1.GET("/events",                    eventHandler.List)
 		v1.GET("/events/:id",               eventHandler.GetEvent)
 
+		v1.GET("/jokes/today",               jokeHandler.GetTodayJoke)
+		v1.GET("/jokes/:id",                 jokeHandler.GetJoke)
+		v1.GET("/jokes/:id/comments",        jokeCommentHandler.ListComments)
+		v1.GET("/joke-comments/:cid/replies", jokeCommentHandler.ListReplies)
+
 		// ── Protected routes (JWT required) ───────────────────────────────────
 		protected := v1.Group("/")
 		protected.Use(middleware.AuthRequired(ts))
@@ -148,6 +161,14 @@ func New(db *gorm.DB, ts *token.Service, mailer email.Sender, cfg *config.Config
 			protected.POST("/posts/:id/like",     likeHandler.TogglePostLike)
 			protected.POST("/comments/:cid/like", likeHandler.ToggleCommentLike)
 
+			// Joke Actions
+			protected.POST("/jokes/:id/like",                      jokeHandler.ToggleLike)
+			protected.POST("/jokes/:id/comments",                  jokeCommentHandler.CreateComment)
+			protected.POST("/jokes/:id/comments/:cid/replies",     jokeCommentHandler.CreateReply)
+			protected.PATCH("/joke-comments/:cid",                 jokeCommentHandler.UpdateComment)
+			protected.DELETE("/joke-comments/:cid",                jokeCommentHandler.DeleteComment)
+			protected.POST("/joke-comments/:cid/like",             jokeCommentHandler.ToggleLike)
+
 			// Notifications
 			// NOTE: read-all must be registered before /:nid to avoid Gin routing it as an ID.
 			protected.GET("/notifications",                notifHandler.List)
@@ -168,6 +189,11 @@ func New(db *gorm.DB, ts *token.Service, mailer email.Sender, cfg *config.Config
 			admin.POST("/events",       eventHandler.CreateEvent)
 			admin.PATCH("/events/:id",  eventHandler.UpdateEvent)
 			admin.DELETE("/events/:id", eventHandler.DeleteEvent)
+
+			admin.GET("/admin/jokes",       jokeHandler.ListJokes)
+			admin.POST("/admin/jokes",      jokeHandler.CreateJoke)
+			admin.PATCH("/admin/jokes/:id", jokeHandler.UpdateJoke)
+			admin.DELETE("/admin/jokes/:id", jokeHandler.DeleteJoke)
 		}
 	}
 
