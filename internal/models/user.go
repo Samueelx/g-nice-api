@@ -14,6 +14,7 @@ type User struct {
 	Bio          string  `gorm:"type:text"                     json:"bio"`
 	AvatarURL    string  `gorm:"size:500"                      json:"avatar_url"`
 	IsVerified   bool    `gorm:"default:false"                 json:"is_verified"`
+	IsGoogleAuth bool    `gorm:"default:false"                 json:"-"`
 	IsPrivate    bool    `gorm:"default:false"                 json:"is_private"`
 	IsAdmin      bool    `gorm:"default:false"                 json:"-"`
 

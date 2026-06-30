@@ -161,3 +161,28 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 
 	OK(c, resp)
 }
+
+// GoogleLogin godoc
+// POST /api/v1/auth/google-login
+// Body: { googleToken }
+func (h *AuthHandler) GoogleLogin(c *gin.Context) {
+	var req services.GoogleLoginRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		BadRequest(c, err.Error())
+		return
+	}
+
+	resp, err := h.authSvc.GoogleLogin(&req)
+	if err != nil {
+		switch {
+		case errors.Is(err, services.ErrUsernameTaken):
+			Conflict(c, "could not generate a unique username")
+		default:
+			log.Printf("google login error: %v", err)
+			Unauthorized(c, "google login failed")
+		}
+		return
+	}
+
+	OK(c, resp)
+}

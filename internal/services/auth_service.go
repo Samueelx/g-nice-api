@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
@@ -16,6 +17,7 @@ import (
 	"github.com/Samueelx/g-nice-api/internal/repository"
 	"github.com/Samueelx/g-nice-api/internal/token"
 	"golang.org/x/crypto/bcrypt"
+	"google.golang.org/api/idtoken"
 )
 
 // ── DTOs ─────────────────────────────────────────────────────────────────────
@@ -57,6 +59,11 @@ type RefreshRequest struct {
 	RefreshToken string `json:"refresh_token" binding:"required"`
 }
 
+// GoogleLoginRequest is the payload for POST /auth/google-login.
+type GoogleLoginRequest struct {
+	GoogleToken string `json:"googleToken" binding:"required"`
+}
+
 // AuthResponse is returned after a successful OTP verification, login, or refresh.
 type AuthResponse struct {
 	Token        string       `json:"token"`
@@ -94,22 +101,25 @@ type AuthService interface {
 	ResendOTP(req *ResendOTPRequest) error
 	Login(req *LoginRequest) (*AuthResponse, error)
 	Refresh(req *RefreshRequest) (*AuthResponse, error)
+	GoogleLogin(req *GoogleLoginRequest) (*AuthResponse, error)
 }
 
 // ── Implementation ────────────────────────────────────────────────────────────
 
 type authService struct {
-	userRepo repository.UserRepository
-	tokens   *token.Service
-	mailer   email.Sender
+	userRepo       repository.UserRepository
+	tokens         *token.Service
+	mailer         email.Sender
+	googleClientID string
 }
 
 // NewAuthService constructs an AuthService with all its dependencies.
-func NewAuthService(userRepo repository.UserRepository, tokens *token.Service, mailer email.Sender) AuthService {
+func NewAuthService(userRepo repository.UserRepository, tokens *token.Service, mailer email.Sender, googleClientID string) AuthService {
 	return &authService{
-		userRepo: userRepo,
-		tokens:   tokens,
-		mailer:   mailer,
+		userRepo:       userRepo,
+		tokens:         tokens,
+		mailer:         mailer,
+		googleClientID: googleClientID,
 	}
 }
 
@@ -359,6 +369,98 @@ func (s *authService) Refresh(req *RefreshRequest) (*AuthResponse, error) {
 	}
 
 	// Token is valid, rotate it
+	t, err := s.tokens.Generate(user.ID, user.Email)
+	if err != nil {
+		return nil, err
+	}
+
+	rtPlain, rtHash, err := generateRefreshToken(user.ID)
+	if err != nil {
+		return nil, err
+	}
+	rtExpiry := time.Now().Add(7 * 24 * time.Hour)
+
+	if err := s.userRepo.UpdateFields(user.ID, map[string]interface{}{
+		"refresh_token_hash":   rtHash,
+		"refresh_token_expiry": rtExpiry,
+	}); err != nil {
+		return nil, err
+	}
+
+	return &AuthResponse{Token: t, RefreshToken: rtPlain, User: user}, nil
+}
+
+// GoogleLogin verifies the Google ID token and creates or logs in the user.
+func (s *authService) GoogleLogin(req *GoogleLoginRequest) (*AuthResponse, error) {
+	payload, err := idtoken.Validate(context.Background(), req.GoogleToken, s.googleClientID)
+	if err != nil {
+		return nil, errors.New("invalid google token")
+	}
+
+	emailRaw, ok := payload.Claims["email"]
+	if !ok {
+		return nil, errors.New("google token does not contain email")
+	}
+	emailStr := emailRaw.(string)
+
+	nameRaw, ok := payload.Claims["name"]
+	displayName := ""
+	if ok {
+		displayName = nameRaw.(string)
+	}
+
+	pictureRaw, ok := payload.Claims["picture"]
+	avatarURL := ""
+	if ok {
+		avatarURL = pictureRaw.(string)
+	}
+
+	user, err := s.userRepo.FindByEmail(emailStr)
+	if err != nil && !errors.Is(err, repository.ErrNotFound) {
+		return nil, err
+	}
+
+	if errors.Is(err, repository.ErrNotFound) {
+		// Create new user
+		prefix := strings.Split(emailStr, "@")[0]
+		username := prefix
+
+		// Ensure uniqueness of username
+		taken, _ := s.userRepo.ExistsByUsername(username)
+		if taken {
+			// Try sequential number if prefix is taken
+			counter := 1
+			for {
+				candidate := fmt.Sprintf("%s%d", prefix, counter)
+				t, _ := s.userRepo.ExistsByUsername(candidate)
+				if !t {
+					username = candidate
+					break
+				}
+				counter++
+			}
+		}
+
+		b := make([]byte, 16)
+		rand.Read(b)
+		hash, _ := bcrypt.GenerateFromPassword(b, bcrypt.MinCost)
+
+		user = &models.User{
+			Username:        username,
+			Email:           emailStr,
+			PasswordHash:    string(hash),
+			DisplayName:     displayName,
+			AvatarURL:       avatarURL,
+			IsVerified:      false,
+			IsEmailVerified: true,
+			IsGoogleAuth:    true,
+		}
+
+		if err := s.userRepo.Create(user); err != nil {
+			return nil, err
+		}
+	}
+
 	t, err := s.tokens.Generate(user.ID, user.Email)
 	if err != nil {
 		return nil, err

@@ -43,7 +43,7 @@ func New(db *gorm.DB, ts *token.Service, mailer email.Sender, cfg *config.Config
 	notifHandler := handlers.NewNotificationHandler(notifSvc)
 
 	// Auth
-	authSvc     := services.NewAuthService(userRepo, ts, mailer)
+	authSvc     := services.NewAuthService(userRepo, ts, mailer, cfg.GoogleClientID)
 	authHandler := handlers.NewAuthHandler(authSvc)
 
 	// Users
@@ -110,6 +110,7 @@ func New(db *gorm.DB, ts *token.Service, mailer email.Sender, cfg *config.Config
 			auth.POST("/verify-otp",     authHandler.VerifyOTP)
 			auth.POST("/resend-otp",     authHandler.ResendOTP)
 			auth.POST("/login",          authHandler.Login)
+			auth.POST("/google-login",   authHandler.GoogleLogin)
 			auth.POST("/refresh",        authHandler.Refresh)
 		}
 

@@ -18,6 +18,7 @@ type Config struct {
 	GinMode    string
 	ResendAPIKey string
 	EmailFrom    string
+	GoogleClientID string
 
 	// S3 media storage
 	AWSAccessKeyID     string
@@ -41,6 +42,7 @@ func Load() (*Config, error) {
 		GinMode:      getEnv("GIN_MODE", "debug"),
 		ResendAPIKey: getEnv("RESEND_API_KEY", ""),
 		EmailFrom:    getEnv("EMAIL_FROM", ""),
+		GoogleClientID: getEnv("GOOGLE_CLIENT_ID", ""),
 
 		// S3
 		AWSAccessKeyID:     getEnv("AWS_ACCESS_KEY_ID", ""),
@@ -60,6 +62,9 @@ func Load() (*Config, error) {
 	}
 	if cfg.EmailFrom == "" {
 		return nil, fmt.Errorf("EMAIL_FROM is required")
+	}
+	if cfg.GoogleClientID == "" {
+		return nil, fmt.Errorf("GOOGLE_CLIENT_ID is required")
 	}
 	if cfg.AWSAccessKeyID == "" {
 		return nil, fmt.Errorf("AWS_ACCESS_KEY_ID is required")
