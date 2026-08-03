@@ -183,18 +183,22 @@ func New(db *gorm.DB, ts *token.Service, mailer email.Sender, cfg *config.Config
 		}
 
 		// ── Admin-only routes (JWT + IsAdmin required) ────────────────────────
-		admin := v1.Group("/")
+		admin := v1.Group("/admin") // Namespaced admin group
 		admin.Use(middleware.AuthRequired(ts))
 		admin.Use(middleware.AdminRequired(userRepo))
 		{
+			// Moved Events routes to resolve under /api/v1/admin/events
+			admin.GET("/events",        eventHandler.List)
+			admin.GET("/events/:id",    eventHandler.GetEvent)
 			admin.POST("/events",       eventHandler.CreateEvent)
 			admin.PATCH("/events/:id",  eventHandler.UpdateEvent)
 			admin.DELETE("/events/:id", eventHandler.DeleteEvent)
 
-			admin.GET("/admin/jokes",       jokeHandler.ListJokes)
-			admin.POST("/admin/jokes",      jokeHandler.CreateJoke)
-			admin.PATCH("/admin/jokes/:id", jokeHandler.UpdateJoke)
-			admin.DELETE("/admin/jokes/:id", jokeHandler.DeleteJoke)
+			// Stripped /admin/ prefix since the group now handles it
+			admin.GET("/jokes",       jokeHandler.ListJokes)
+			admin.POST("/jokes",      jokeHandler.CreateJoke)
+			admin.PATCH("/jokes/:id", jokeHandler.UpdateJoke)
+			admin.DELETE("/jokes/:id", jokeHandler.DeleteJoke)
 		}
 	}
 

@@ -11,23 +11,21 @@ import (
 
 // ── DTOs ─────────────────────────────────────────────────────────────────────
 
-type SponsorRequest struct {
-	Name       string  `json:"name" binding:"required,max=150"`
-	LogoURL    *string `json:"logo_url" binding:"omitempty,url"`
-	WebsiteURL *string `json:"website_url" binding:"omitempty,url"`
-}
-
 type CreateJokeRequest struct {
-	Content    string          `json:"content" binding:"required,max=1000"`
-	ActiveDate string          `json:"active_date" binding:"required"`
-	Sponsor    *SponsorRequest `json:"sponsor"`
+	Content           string  `json:"content" binding:"required,max=1000"`
+	ActiveDate        string  `json:"active_date" binding:"required"`
+	SponsorName       *string `json:"sponsor_name" binding:"omitempty,max=150"`
+	SponsorLogoURL    *string `json:"sponsor_logo_url" binding:"omitempty,url"`
+	SponsorWebsiteURL *string `json:"sponsor_website_url" binding:"omitempty,url"`
 }
 
 type UpdateJokeRequest struct {
-	Content    *string         `json:"content" binding:"omitempty,max=1000"`
-	ActiveDate *string         `json:"active_date" binding:"omitempty"`
-	Sponsor    *SponsorRequest `json:"sponsor"`
-	RemoveSponsor bool         `json:"-"` // We will set this in the handler if we see "sponsor": null
+	Content           *string `json:"content" binding:"omitempty,max=1000"`
+	ActiveDate        *string `json:"active_date" binding:"omitempty"`
+	SponsorName       *string `json:"sponsor_name" binding:"omitempty,max=150"`
+	SponsorLogoURL    *string `json:"sponsor_logo_url" binding:"omitempty,url"`
+	SponsorWebsiteURL *string `json:"sponsor_website_url" binding:"omitempty,url"`
+	RemoveSponsor     bool    `json:"-"` // We will set this in the handler if we see "sponsor_name": null
 }
 
 // ── Sentinel errors ───────────────────────────────────────────────────────────
@@ -98,11 +96,9 @@ func (s *jokeService) CreateJoke(userID uint, req *CreateJokeRequest) (*models.J
 		CreatedByID: userID,
 	}
 
-	if req.Sponsor != nil {
-		joke.SponsorName = &req.Sponsor.Name
-		joke.SponsorLogoURL = req.Sponsor.LogoURL
-		joke.SponsorWebsiteURL = req.Sponsor.WebsiteURL
-	}
+	joke.SponsorName = req.SponsorName
+	joke.SponsorLogoURL = req.SponsorLogoURL
+	joke.SponsorWebsiteURL = req.SponsorWebsiteURL
 
 	if err := s.jokeRepo.Create(joke); err != nil {
 		if errors.Is(err, repository.ErrDuplicateKey) {
@@ -139,13 +135,15 @@ func (s *jokeService) UpdateJoke(jokeID uint, req *UpdateJokeRequest) (*models.J
 		fields["sponsor_name"] = nil
 		fields["sponsor_logo_url"] = nil
 		fields["sponsor_website_url"] = nil
-	} else if req.Sponsor != nil {
-		fields["sponsor_name"] = req.Sponsor.Name
-		if req.Sponsor.LogoURL != nil {
-			fields["sponsor_logo_url"] = *req.Sponsor.LogoURL
+	} else {
+		if req.SponsorName != nil {
+			fields["sponsor_name"] = *req.SponsorName
 		}
-		if req.Sponsor.WebsiteURL != nil {
-			fields["sponsor_website_url"] = *req.Sponsor.WebsiteURL
+		if req.SponsorLogoURL != nil {
+			fields["sponsor_logo_url"] = *req.SponsorLogoURL
+		}
+		if req.SponsorWebsiteURL != nil {
+			fields["sponsor_website_url"] = *req.SponsorWebsiteURL
 		}
 	}
 

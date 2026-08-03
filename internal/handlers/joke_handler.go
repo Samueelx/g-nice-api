@@ -128,7 +128,7 @@ func (h *JokeHandler) UpdateJoke(c *gin.Context) {
 
 	var rawMap map[string]interface{}
 	if err := c.ShouldBindBodyWith(&rawMap, binding.JSON); err == nil {
-		if sponsorVal, exists := rawMap["sponsor"]; exists && sponsorVal == nil {
+		if sponsorVal, exists := rawMap["sponsor_name"]; exists && sponsorVal == nil {
 			req.RemoveSponsor = true
 		}
 	}
