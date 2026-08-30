@@ -8,7 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// allowedPrefixes restricts the ?type query param to known S3 key prefixes.
+// allowedPrefixes restricts the ?type query param to known object key prefixes.
 var allowedPrefixes = map[string]bool{
 	"posts":    true,
 	"avatars":  true,
@@ -37,7 +37,7 @@ func (h *UploadHandler) Upload(c *gin.Context) {
 		return
 	}
 
-	// Determine the S3 key prefix from the optional ?type query param.
+	// Determine the object key prefix from the optional ?type query param.
 	prefix := c.DefaultQuery("type", "posts")
 	if !allowedPrefixes[prefix] {
 		BadRequest(c, "invalid type; allowed values: posts, avatars, sponsors")

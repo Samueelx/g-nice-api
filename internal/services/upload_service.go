@@ -36,7 +36,7 @@ var (
 
 // UploadService handles media upload validation and storage.
 type UploadService interface {
-	// UploadMedia validates the file, generates a unique S3 key under prefix,
+	// UploadMedia validates the file, generates a unique object key under prefix,
 	// streams it to object storage, and returns the public URL.
 	// prefix should be "posts" or "avatars".
 	UploadMedia(ctx context.Context, userID uint, prefix string, file multipart.File, header *multipart.FileHeader) (string, error)
@@ -88,7 +88,7 @@ func (s *uploadService) UploadMedia(
 		if !found {
 			return "", ErrUnsupportedMediaType
 		}
-		// Re-derive content type from the extension for the S3 header.
+		// Re-derive content type from the extension for the storage header.
 		for mime, e := range allowedMIMETypes {
 			if e == ext {
 				contentType = mime

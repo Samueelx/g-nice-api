@@ -81,17 +81,14 @@ func New(db *gorm.DB, ts *token.Service, mailer email.Sender, cfg *config.Config
 	searchSvc     := services.NewSearchService(userRepo, postRepo, eventRepo)
 	searchHandler := handlers.NewSearchHandler(searchSvc)
 
-	// Media uploads (S3)
-	s3Store, err := storage.NewS3Storage(storage.S3Config{
-		AccessKeyID:     cfg.AWSAccessKeyID,
-		SecretAccessKey: cfg.AWSSecretAccessKey,
-		Region:          cfg.AWSRegion,
-		Bucket:          cfg.AWSS3Bucket,
+	// Media uploads (GCS)
+	gcsStore, err := storage.NewGCSStorage(storage.GCSConfig{
+		Bucket: cfg.GCPBucketName,
 	})
 	if err != nil {
-		log.Fatalf("❌ Failed to initialise S3 storage: %v", err)
+		log.Fatalf("❌ Failed to initialise GCS storage: %v", err)
 	}
-	uploadSvc     := services.NewUploadService(s3Store)
+	uploadSvc     := services.NewUploadService(gcsStore)
 	uploadHandler := handlers.NewUploadHandler(uploadSvc)
 
 

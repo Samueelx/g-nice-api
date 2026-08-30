@@ -9,13 +9,13 @@ import (
 type UploadResult struct {
 	// URL is the publicly accessible HTTPS URL of the uploaded object.
 	URL string
-	// Key is the S3 object key (e.g. "posts/42/abc123.jpg").
+	// Key is the object key (e.g. "posts/42/abc123.jpg").
 	// Stored alongside the URL so the object can be deleted later if needed.
 	Key string
 }
 
 // Storage is the interface all storage backends must satisfy.
-// Implementations live in this package (e.g. S3Storage, LocalStorage).
+// Implementations live in this package (e.g. GCSStorage, LocalStorage).
 type Storage interface {
 	// Upload streams r to the backend under the given key with the specified
 	// content type and returns the result on success.

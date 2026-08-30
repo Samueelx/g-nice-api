@@ -20,11 +20,8 @@ type Config struct {
 	EmailFrom    string
 	GoogleClientID string
 
-	// S3 media storage
-	AWSAccessKeyID     string
-	AWSSecretAccessKey string
-	AWSRegion          string
-	AWSS3Bucket        string
+	// GCS media storage
+	GCPBucketName string
 }
 
 // Load reads environment variables and returns a Config.
@@ -44,11 +41,8 @@ func Load() (*Config, error) {
 		EmailFrom:    getEnv("EMAIL_FROM", ""),
 		GoogleClientID: getEnv("GOOGLE_CLIENT_ID", ""),
 
-		// S3
-		AWSAccessKeyID:     getEnv("AWS_ACCESS_KEY_ID", ""),
-		AWSSecretAccessKey: getEnv("AWS_SECRET_ACCESS_KEY", ""),
-		AWSRegion:          getEnv("AWS_REGION", "af-south-1"),
-		AWSS3Bucket:        getEnv("AWS_S3_BUCKET", "g-nice-media"),
+		// GCS
+		GCPBucketName: getEnv("GCP_BUCKET_NAME", ""),
 	}
 
 	if cfg.DBPassword == "" {
@@ -66,11 +60,8 @@ func Load() (*Config, error) {
 	if cfg.GoogleClientID == "" {
 		return nil, fmt.Errorf("GOOGLE_CLIENT_ID is required")
 	}
-	if cfg.AWSAccessKeyID == "" {
-		return nil, fmt.Errorf("AWS_ACCESS_KEY_ID is required")
-	}
-	if cfg.AWSSecretAccessKey == "" {
-		return nil, fmt.Errorf("AWS_SECRET_ACCESS_KEY is required")
+	if cfg.GCPBucketName == "" {
+		return nil, fmt.Errorf("GCP_BUCKET_NAME is required")
 	}
 
 	return cfg, nil
