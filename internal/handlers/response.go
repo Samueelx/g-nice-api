@@ -49,6 +49,11 @@ func Conflict(c *gin.Context, msg string) {
 	c.JSON(http.StatusConflict, APIResponse{Success: false, Error: msg})
 }
 
+// TooManyRequests sends a 429 response (e.g. rate limit or OTP cooldown).
+func TooManyRequests(c *gin.Context, msg string) {
+	c.JSON(http.StatusTooManyRequests, APIResponse{Success: false, Error: msg})
+}
+
 // InternalError sends a 500 response.
 func InternalError(c *gin.Context) {
 	c.JSON(http.StatusInternalServerError, APIResponse{

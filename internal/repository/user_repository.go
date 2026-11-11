@@ -114,7 +114,7 @@ func (r *userRepository) IncrementCounter(id uint, column string, delta int) err
 }
 
 func (r *userRepository) Delete(id uint) error {
-	return r.db.Delete(&models.User{}, id).Error
+	return r.db.Unscoped().Delete(&models.User{}, id).Error
 }
 
 // Search performs a case-insensitive prefix/infix search across username and display_name.

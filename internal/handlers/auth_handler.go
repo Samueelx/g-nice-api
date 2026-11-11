@@ -65,7 +65,7 @@ func (h *AuthHandler) VerifyOTP(c *gin.Context) {
 		case errors.Is(err, services.ErrOTPExpired):
 			BadRequest(c, "verification code has expired — please request a new one")
 		case errors.Is(err, services.ErrOTPMaxAttempts):
-			c.JSON(429, APIResponse{Success: false, Error: "too many incorrect attempts — please request a new code"})
+			TooManyRequests(c, "too many incorrect attempts — please request a new code")
 		case errors.Is(err, services.ErrInvalidOTP):
 			BadRequest(c, "invalid verification code")
 		default:
@@ -94,11 +94,11 @@ func (h *AuthHandler) ResendOTP(c *gin.Context) {
 		switch {
 		case errors.Is(err, services.ErrAlreadyVerified):
 			Conflict(c, "email address is already verified")
+		case errors.Is(err, services.ErrOTPCooldown):
+			TooManyRequests(c, err.Error())
 		default:
-			// Cooldown errors are plain strings from the service.
-			// Distinguish them from true internal errors by checking the message.
 			log.Printf("resend-otp error: %v", err)
-			c.JSON(429, APIResponse{Success: false, Error: err.Error()})
+			InternalError(c)
 		}
 		return
 	}

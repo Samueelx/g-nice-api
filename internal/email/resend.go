@@ -112,7 +112,7 @@ const otpHTMLTemplate = `<!DOCTYPE html>
               </table>
 
               <!-- Expiry notice -->
-              <p style="margin:28px 0 0;text-align:center;color:#6666888;font-size:13px;">
+              <p style="margin:28px 0 0;text-align:center;color:#666688;font-size:13px;">
                 ⏱ This code expires in <strong style="color:#a0a0b8;">10 minutes</strong>.
                 Do not share it with anyone.
               </p>

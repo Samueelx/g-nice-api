@@ -74,16 +74,29 @@ type AuthResponse struct {
 // ── Sentinel errors ───────────────────────────────────────────────────────────
 
 var (
-	ErrEmailTaken      = errors.New("email is already in use")
-	ErrUsernameTaken   = errors.New("username is already taken")
-	ErrInvalidCreds    = errors.New("invalid email or password")
+	ErrEmailTaken          = errors.New("email is already in use")
+	ErrUsernameTaken       = errors.New("username is already taken")
+	ErrInvalidCreds        = errors.New("invalid email or password")
 	ErrNotVerified         = errors.New("email address is not verified")
 	ErrAlreadyVerified     = errors.New("email address is already verified")
 	ErrInvalidOTP          = errors.New("invalid or incorrect verification code")
 	ErrOTPExpired          = errors.New("verification code has expired")
 	ErrOTPMaxAttempts      = errors.New("too many incorrect attempts — please request a new code")
+	ErrOTPCooldown         = errors.New("please wait before requesting a new code")
 	ErrInvalidRefreshToken = errors.New("invalid or expired refresh token")
 )
+
+type otpCooldownError struct {
+	waitSeconds int
+}
+
+func (e otpCooldownError) Error() string {
+	return fmt.Sprintf("please wait %d seconds before requesting a new code", e.waitSeconds)
+}
+
+func (e otpCooldownError) Is(target error) bool {
+	return target == ErrOTPCooldown
+}
 
 const (
 	otpExpiry      = 10 * time.Minute
@@ -171,8 +184,10 @@ func (s *authService) Register(req *RegisterRequest) (*RegisterResponse, error) 
 		return nil, err
 	}
 
-	// Send email — if it fails, the user can resend via /auth/resend-otp.
+	// Send email — if delivery fails, roll back the unverified user record so
+	// the caller can retry registration without hitting a 409 Conflict or cooldown.
 	if err := s.mailer.SendOTP(user.Email, user.DisplayName, otp); err != nil {
+		_ = s.userRepo.Delete(user.ID)
 		return nil, fmt.Errorf("send verification email: %w", err)
 	}
 
@@ -273,7 +288,10 @@ func (s *authService) ResendOTP(req *ResendOTPRequest) error {
 		if remaining > otpExpiry-otpResendCooldown {
 			// OTP was issued less than 60 seconds ago.
 			waitSeconds := int((remaining - (otpExpiry - otpResendCooldown)).Seconds())
-			return fmt.Errorf("please wait %d seconds before requesting a new code", waitSeconds)
+			if waitSeconds < 1 {
+				waitSeconds = 1
+			}
+			return otpCooldownError{waitSeconds: waitSeconds}
 		}
 	}
 
@@ -283,15 +301,16 @@ func (s *authService) ResendOTP(req *ResendOTPRequest) error {
 	}
 	expiry := time.Now().Add(otpExpiry)
 
-	if err := s.userRepo.UpdateFields(user.ID, map[string]interface{}{
+	// Send email first so a failed delivery does not reset otp_expiry and trigger the cooldown.
+	if err := s.mailer.SendOTP(user.Email, user.DisplayName, otp); err != nil {
+		return fmt.Errorf("send verification email: %w", err)
+	}
+
+	return s.userRepo.UpdateFields(user.ID, map[string]interface{}{
 		"otp_hash":     otpHash,
 		"otp_expiry":   expiry,
 		"otp_attempts": 0,
-	}); err != nil {
-		return err
-	}
-
-	return s.mailer.SendOTP(user.Email, user.DisplayName, otp)
+	})
 }
 
 // Login verifies credentials and issues a JWT.
@@ -509,7 +528,7 @@ func generateRefreshToken(userID uint) (string, string, error) {
 	}
 	randomHex := hex.EncodeToString(b)
 	plaintext := fmt.Sprintf("%d:%s", userID, randomHex)
-	
+
 	// Hash the entire string
 	hash := sha256.Sum256([]byte(plaintext))
 	return plaintext, hex.EncodeToString(hash[:]), nil
